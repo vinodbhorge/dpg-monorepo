@@ -1,0 +1,24 @@
+architecture: standalone
+
+auth:
+  enabled: true
+  existingSecret: dpg-redis
+  existingSecretPasswordKey: redis-password
+
+commonConfiguration: |-
+  appendonly yes
+  appendfsync everysec
+  save ""
+  maxmemory 256mb
+  maxmemory-policy allkeys-lru
+
+master:
+  persistence:
+    enabled: true
+    size: 8Gi
+  service:
+    ports:
+      redis: 6379
+
+replica:
+  replicaCount: 0

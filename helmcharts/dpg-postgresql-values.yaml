@@ -1,0 +1,17 @@
+architecture: standalone
+
+auth:
+  username: dpg
+  database: dpg
+  existingSecret: dpg-postgres
+  secretKeys:
+    adminPasswordKey: postgres-password
+    userPasswordKey: password
+
+primary:
+  persistence:
+    enabled: true
+    size: 8Gi
+  service:
+    ports:
+      postgresql: 5432
