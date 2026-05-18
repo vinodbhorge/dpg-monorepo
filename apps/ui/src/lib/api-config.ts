@@ -32,10 +32,10 @@ class ApiConfig {
       runtimeConfig.VITE_API_URLS ||
       import.meta.env.VITE_API_URLS;
     const defaultUrl =
-      runtimeConfig.VITE_DEFAULT_API_URL ||
-      runtimeConfig.VITE_API_URL ||
-      import.meta.env.VITE_DEFAULT_API_URL ||
-      import.meta.env.VITE_API_URL ||
+      runtimeConfig.VITE_DEFAULT_API_URL ??
+      runtimeConfig.VITE_API_URL ??
+      import.meta.env.VITE_DEFAULT_API_URL ??
+      import.meta.env.VITE_API_URL ??
       'http://localhost:3000';
 
     this.endpoints.push({

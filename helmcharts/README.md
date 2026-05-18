@@ -1,15 +1,77 @@
 # DPG Helm Charts
 
-This directory holds charts for deploying the DPG monorepo on Kubernetes.
+Charts for deploying the DPG monorepo on Kubernetes.
 
-## Data services (vendored Bitnami charts)
+## Layout
 
-| Service | Chart | Chart version | App version |
-| --- | --- | --- | --- |
-| PostgreSQL | `bitnami/postgresql` | `18.6.6` | `18.4.0` |
-| Redis | `bitnami/redis` | `19.6.4` | `7.2.5` |
+| Path | Purpose |
+| --- | --- |
+| `dpg/` | **Umbrella chart** — bundles all four below with centralized values |
+| `api/` | API service (Fastify/Node) |
+| `ui/` | UI (Vite/React + nginx) |
+| `postgresql/` | Vendored Bitnami PostgreSQL `18.6.6` (app `18.4.0`) |
+| `redis/` | Vendored Bitnami Redis `19.6.4` (app `7.2.5`) |
 
-Use the DPG override files to keep the deployment close to the compose setup.
+## Recommended: install via umbrella
+
+Single command. Single values file. All image / resource / credential settings
+live in `helmcharts/dpg/values.yaml` under three top sections (`images`,
+`resources`, `credentials`) and fan out to subcharts via YAML anchors — you
+edit one place, every chart picks it up.
+
+```bash
+# 1. Create the postgres / redis secrets in the target namespace
+kubectl create secret generic dpg-postgres \
+  --from-literal=postgres-password=<admin-pw> \
+  --from-literal=password=<user-pw>
+
+kubectl create secret generic dpg-redis \
+  --from-literal=redis-password=<redis-pw>
+
+# 2. Resolve subchart dependencies (one-time after Chart.yaml changes)
+helm dependency update ./helmcharts/dpg
+
+# 3. Install / upgrade
+helm upgrade --install dpg ./helmcharts/dpg \
+  --set credentials.api.data.AUTH_SECRET=<random> \
+  --set credentials.api.data.POSTGRES_PASSWORD=<user-pw> \
+  --set credentials.api.data.REDIS_PASSWORD=<redis-pw>
+```
+
+Override an image tag for one component:
+
+```bash
+helm upgrade dpg ./helmcharts/dpg --set images.api.tag=v1.2.3
+```
+
+Override resources for one component:
+
+```bash
+helm upgrade dpg ./helmcharts/dpg \
+  --set-json 'resources.api={"limits":{"cpu":"500m","memory":"512Mi"}}'
+```
+
+> The umbrella assumes the release name is `dpg` for the in-cluster Postgres /
+> Redis service DNS (`dpg-postgresql`, `dpg-redis-master`). If you change the
+> release name, also set `api.postgres.host` and `api.redis.host`.
+
+## Centralized values reference
+
+Edit only these three sections in `helmcharts/dpg/values.yaml`:
+
+| Section | Drives |
+| --- | --- |
+| `images.api`, `images.ui`, `images.postgresql`, `images.redis` | All container images |
+| `resources.api`, `resources.ui`, `resources.postgresql`, `resources.redis.master`, `resources.redis.replica` | All resource limits/requests |
+| `credentials.postgresql.existingSecret`, `credentials.redis.existingSecret`, `credentials.api.data.*` | All secret material |
+
+The per-subchart blocks below (`api:`, `ui:`, `postgresql:`, `redis:`) consume
+those sections via YAML anchors — do not duplicate values there.
+
+## Standalone install (legacy)
+
+The individual charts still work on their own. Use the per-chart override
+files if you prefer separate releases:
 
 ```bash
 helm upgrade --install dpg-postgres ./helmcharts/postgresql \
@@ -17,44 +79,10 @@ helm upgrade --install dpg-postgres ./helmcharts/postgresql \
 
 helm upgrade --install dpg-redis ./helmcharts/redis \
   -f ./helmcharts/dpg-redis-values.yaml
+
+helm upgrade --install dpg-api ./helmcharts/api --set image.tag=<tag> ...
+helm upgrade --install dpg-ui  ./helmcharts/ui  --set image.tag=<tag> ...
 ```
 
-Create the referenced Kubernetes secrets (`dpg-postgres`, `dpg-redis`)
-separately in the target namespace.
-
-## Application charts
-
-| App | Chart | Image |
-| --- | --- | --- |
-| API (Fastify/Node) | `./api` | `ghcr.io/<org>/dpg-monorepo/api` |
-| UI (Vite/React + nginx) | `./ui` | `ghcr.io/<org>/dpg-monorepo/ui` |
-
-### API
-
-```bash
-helm upgrade --install dpg-api ./helmcharts/api \
-  --set image.tag=<tag> \
-  --set secrets.data.AUTH_SECRET=<random> \
-  --set secrets.data.POSTGRES_PASSWORD=<pg-password> \
-  --set secrets.data.REDIS_PASSWORD=<redis-password> \
-  --set config.API_DOMAIN=https://api.example.com
-```
-
-Non-secret env lives under `config.*` (rendered into a ConfigMap). Secrets
-land in a Secret rendered from `secrets.data.*`; set `secrets.create=false`
-and `secrets.existingSecret=<name>` to bring your own. Postgres/Redis hosts
-default to the bundled `dpg-postgres-postgresql` / `dpg-redis-master`
-services — toggle `postgres.enabled` / `redis.enabled` or override
-`config.POSTGRES_HOST` / `config.REDIS_HOST` for external clusters.
-
-### UI
-
-```bash
-helm upgrade --install dpg-ui ./helmcharts/ui \
-  --set image.tag=<tag> \
-  --set runtimeConfig.VITE_API_URL=https://api.example.com
-```
-
-The chart mounts a `config.js` ConfigMap at
-`/usr/share/nginx/html/config.js`, populating `window.__DPG_UI_CONFIG__` at
-runtime — no rebuild needed to retarget API URLs.
+Note: standalone path does **not** share the centralized values. Prefer the
+umbrella unless you need separate release lifecycles.

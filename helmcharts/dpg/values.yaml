@@ -1,0 +1,210 @@
+# =============================================================================
+# DPG umbrella chart — centralized values
+# Edit ONLY the three sections below (images, resources, credentials).
+# Per-subchart blocks at the bottom alias these via YAML anchors.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Images — single source for all 4 components
+# -----------------------------------------------------------------------------
+images:
+  api: &api_image
+    repository: dpg-api
+    tag: "local"
+    pullPolicy: Never
+  ui: &ui_image
+    repository: dpg-ui
+    tag: "local"
+    pullPolicy: Never
+  postgresql: &postgresql_image
+    registry: docker.io
+    repository: bitnamilegacy/postgresql
+    tag: 17.6.0
+    pullPolicy: IfNotPresent
+  redis: &redis_image
+    registry: docker.io
+    repository: bitnamilegacy/redis
+    tag: 7.2.5
+    pullPolicy: IfNotPresent
+
+# Pull secrets shared by api/ui (bitnami charts use image.pullSecrets directly).
+imagePullSecrets: &image_pull_secrets []
+
+# -----------------------------------------------------------------------------
+# Resources — single source for all 4 components
+# -----------------------------------------------------------------------------
+resources:
+  api: &api_resources {}
+    # limits:
+    #   cpu: 500m
+    #   memory: 512Mi
+    # requests:
+    #   cpu: 100m
+    #   memory: 256Mi
+  ui: &ui_resources {}
+    # limits:
+    #   cpu: 200m
+    #   memory: 128Mi
+    # requests:
+    #   cpu: 50m
+    #   memory: 64Mi
+  postgresql: &postgresql_resources {}
+    # limits:
+    #   cpu: 1000m
+    #   memory: 1Gi
+    # requests:
+    #   cpu: 250m
+    #   memory: 512Mi
+  redis:
+    master: &redis_master_resources {}
+    replica: &redis_replica_resources {}
+
+# -----------------------------------------------------------------------------
+# Credentials — single source for all secret material
+# Postgres/Redis use existingSecret (created out-of-band in the namespace).
+# API secrets render into a Helm-managed Secret unless existingSecret set.
+# -----------------------------------------------------------------------------
+credentials:
+  postgresql:
+    existingSecret: &pg_existing_secret dpg-postgres
+    # Keys inside the existingSecret
+    adminPasswordKey: &pg_admin_key postgres-password
+    userPasswordKey: &pg_user_key password
+    username: &pg_username dpg
+    database: &pg_database dpg
+  redis:
+    existingSecret: &redis_existing_secret dpg-redis
+    passwordKey: &redis_password_key redis-password
+  api: &api_secrets
+    create: true
+    existingSecret: ""
+    data:
+      AUTH_SECRET: ""
+      POSTGRES_USER: dpg
+      POSTGRES_PASSWORD: ""
+      POSTGRES_DB: dpg
+      REDIS_PASSWORD: ""
+      NOTIFICATION_SERVICE_ENDPOINT: ""
+      NOTIFICATION_SERVICE_KEY_ID: ""
+      NOTIFICATION_SERVICE_SECRET: ""
+      SMS_TEMPLATE_ID: ""
+      MATCH_SCORE_PROVIDER: ""
+      DPG_SCORING_ENDPOINT: ""
+      DPG_SCORING_KEY_ID: ""
+      DPG_SCORING_SECRET: ""
+      DPG_SCORING_PATH: ""
+      DPG_SCORING_VERSION: ""
+      DPG_SCORING_PROMPT_VERSION: ""
+
+# =============================================================================
+# Subchart pass-throughs — do NOT edit values here.
+# Each block uses anchors from the sections above.
+# Non-shared (chart-specific) settings live here.
+# =============================================================================
+
+api:
+  image: *api_image
+  imagePullSecrets: *image_pull_secrets
+  resources: *api_resources
+  secrets: *api_secrets
+
+  replicaCount: 1
+  service:
+    type: ClusterIP
+    port: 2742
+    targetPort: 2742
+  ingress:
+    enabled: false
+  config:
+    NODE_ENV: production
+    INSTANCE_NAME: dpg
+    INSTANCE_ENV: production
+    API_DOMAIN: http://api.dpg.local
+    API_PORT: "2742"
+    AUTH_MIDDLEWARE_ENABLED: "true"
+    CREATE_TEST_OTP: "false"
+    ALLOWED_ORIGINS: ""
+    SERVED_DOMAINS: ""
+    NETWORK_CONFIG_SOURCE: local
+    NETWORK_CONFIG_LOCAL_FILE: examples/schemas/yellow_dot/network.json
+    NETWORK_CONFIG_URLS: ""
+    ALLOW_EXTRA_SCHEMA_DATA: "false"
+    SCHEMA_REGISTRY_URL: ""
+  # Hosts assume umbrella release name "dpg". Override --set api.postgres.host=... if different.
+  postgres:
+    enabled: true
+    host: dpg-postgresql
+    port: 5432
+  redis:
+    enabled: true
+    host: dpg-redis-master
+    port: 6379
+
+ui:
+  image: *ui_image
+  imagePullSecrets: *image_pull_secrets
+  resources: *ui_resources
+
+  # nginx in the UI pod reverse-proxies /api/* to this upstream.
+  apiUpstream: "http://dpg-api:2742"
+
+  replicaCount: 1
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 8080
+  ingress:
+    enabled: false
+  # UI nginx proxies /api/* to the in-cluster dpg-api service, so the browser
+  # only needs to reach the UI pod (single port-forward, API never exposed).
+  runtimeConfig:
+    VITE_API_URL: "/api"
+    VITE_API_URLS: ""
+    VITE_DEFAULT_API_URL: ""
+    VITE_SHOW_INSTANCE_SELECTOR: "false"
+
+postgresql:
+  enabled: true
+  image: *postgresql_image
+  architecture: standalone
+  auth:
+    username: *pg_username
+    database: *pg_database
+    existingSecret: *pg_existing_secret
+    secretKeys:
+      adminPasswordKey: *pg_admin_key
+      userPasswordKey: *pg_user_key
+  primary:
+    resources: *postgresql_resources
+    persistence:
+      enabled: true
+      size: 8Gi
+    service:
+      ports:
+        postgresql: 5432
+
+redis:
+  enabled: true
+  image: *redis_image
+  architecture: standalone
+  auth:
+    enabled: true
+    existingSecret: *redis_existing_secret
+    existingSecretPasswordKey: *redis_password_key
+  commonConfiguration: |-
+    appendonly yes
+    appendfsync everysec
+    save ""
+    maxmemory 256mb
+    maxmemory-policy allkeys-lru
+  master:
+    resources: *redis_master_resources
+    persistence:
+      enabled: true
+      size: 8Gi
+    service:
+      ports:
+        redis: 6379
+  replica:
+    replicaCount: 0
+    resources: *redis_replica_resources
