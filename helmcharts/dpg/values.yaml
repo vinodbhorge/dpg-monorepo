@@ -9,13 +9,13 @@
 # -----------------------------------------------------------------------------
 images:
   api: &api_image
-    repository: dpg-api
-    tag: "local"
-    pullPolicy: Never
+    repository: ghcr.io/vinodbhorge/dpg-monorepo/api
+    tag: "v1.0.2"
+    pullPolicy: IfNotPresent
   ui: &ui_image
-    repository: dpg-ui
-    tag: "local"
-    pullPolicy: Never
+    repository: ghcr.io/vinodbhorge/dpg-monorepo/ui
+    tag: "v1.0.2"
+    pullPolicy: IfNotPresent
   postgresql: &postgresql_image
     registry: docker.io
     repository: bitnamilegacy/postgresql
