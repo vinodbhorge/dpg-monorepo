@@ -64,7 +64,11 @@ export function ProfileFormPage() {
 
   // Get network from URL query param, fallback to env config
   const configuredNetworkNames = React.useMemo(
-    () => parseNetworkNames(import.meta.env.VITE_NETWORK_NAME),
+    () =>
+      parseNetworkNames(
+        window.__DPG_UI_CONFIG__?.VITE_NETWORK_NAME ??
+          import.meta.env.VITE_NETWORK_NAME
+      ),
     []
   );
   const networkFromUrl = searchParams.get('network');

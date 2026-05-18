@@ -9,6 +9,7 @@ interface RuntimeConfig {
   VITE_API_URL?: string;
   VITE_API_URLS?: string;
   VITE_SHOW_INSTANCE_SELECTOR?: string;
+  VITE_NETWORK_NAME?: string;
 }
 
 declare global {

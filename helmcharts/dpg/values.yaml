@@ -159,6 +159,9 @@ ui:
     VITE_API_URLS: ""
     VITE_DEFAULT_API_URL: ""
     VITE_SHOW_INSTANCE_SELECTOR: "false"
+    # Comma-separated network names to show in UI. Empty = show all networks
+    # that the API serves (currently yellow_dot + blue_dot).
+    VITE_NETWORK_NAME: ""
 
 postgresql:
   enabled: true
@@ -228,9 +231,11 @@ schemas:
   enabled: true
   image: nginx:1.27-alpine
   imagePullPolicy: IfNotPresent
-  # Browser-facing API URL; used to substitute __PUBLIC_API_URL__ in network.json
-  # instance_url fields. For local port-forward keep http://localhost:8080.
-  publicApiUrl: "http://localhost:8080"
+  # instance_url substituted into network.json files. The API uses these for
+  # cross-instance item fetches, so it must be reachable from inside the
+  # cluster — not from the browser. Default points at the in-cluster API
+  # Service.
+  publicApiUrl: "http://dpg-api:2742"
   networks:
     - yellow_dot
     - blue_dot

@@ -1,7 +1,9 @@
+import * as React from 'react';
 import type { RJSFSchema } from '@rjsf/utils';
 import type { DotActionSchema } from '@/engine/types';
 import { DomainCard } from './domain-card';
 import { MatchScoreCard } from '@/components/match-score';
+import { ItemDetailDialog } from './item-detail-dialog';
 import type { Item } from '@/lib/item-api';
 
 interface CardGridProps {
@@ -59,6 +61,14 @@ export function CardGrid({
     );
   }
 
+  const [detailId, setDetailId] = React.useState<string | null>(null);
+  const detailItem = detailId ? items.find((i) => i.id === detailId) : null;
+
+  const handleCardClick = (id: string) => {
+    setDetailId(id);
+    onItemClick?.(id);
+  };
+
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {items.map((item) => {
@@ -93,7 +103,7 @@ export function CardGrid({
               onAction={(type, actionSchema) =>
                 onAction?.(item.id, type, actionSchema)
               }
-              onClick={() => onItemClick?.(item.id)}
+              onClick={() => handleCardClick(item.id)}
               localItem={localItem}
               networkItem={networkItem}
             />
@@ -116,6 +126,23 @@ export function CardGrid({
           />
         );
       })}
+
+      {detailItem ? (
+        <ItemDetailDialog
+          open={true}
+          onOpenChange={(o) => {
+            if (!o) setDetailId(null);
+          }}
+          schema={schema}
+          schemaName={schemaName}
+          data={detailItem.data}
+          itemId={detailItem.id}
+          actions={actions}
+          onAction={(type, actionSchema) => {
+            onAction?.(detailItem.id, type, actionSchema);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

@@ -135,7 +135,10 @@ export function HomePage() {
   );
   const [resolvedNetwork, setResolvedNetwork] = React.useState<DotNetworkSchema | null>(null);
   const [allNetworks, setAllNetworks] = React.useState<DotNetworkSchema[]>([]);
-  const configuredNetworkNames = parseNetworkNames(import.meta.env.VITE_NETWORK_NAME);
+  const configuredNetworkNames = parseNetworkNames(
+    window.__DPG_UI_CONFIG__?.VITE_NETWORK_NAME ??
+      import.meta.env.VITE_NETWORK_NAME
+  );
   
   // Get network from URL query param, fallback to env config
   const networkFromUrl = searchParams.get('network');
