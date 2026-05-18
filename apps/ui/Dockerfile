@@ -43,11 +43,11 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
   pnpm turbo run build --filter=ui
 
 
-FROM nginx:1.27-alpine AS runner
+FROM nginxinc/nginx-unprivileged:1.27-alpine AS runner
 
-COPY apps/ui/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=builder /app/apps/ui/dist /usr/share/nginx/html
+COPY --chown=nginx:nginx apps/ui/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --chown=nginx:nginx --from=builder /app/apps/ui/dist /usr/share/nginx/html
 
-EXPOSE 80
+EXPOSE 8080
 
 CMD ["nginx", "-g", "daemon off;"]

@@ -80,6 +80,9 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
 # Copy built output AFTER install (important for layer caching)
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 
+# Schema/network examples referenced by NETWORK_CONFIG_LOCAL_FILE at runtime
+COPY examples ./examples
+
 EXPOSE ${API_PORT}
 USER node
 

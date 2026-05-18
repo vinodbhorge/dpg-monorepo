@@ -28,7 +28,11 @@ export async function loadNetworkConfigs(
 
   if (options.source === 'local') {
     const localFile = resolve(process.cwd(), options.localFile);
-    const contents = await readFile(localFile, 'utf8');
+    const raw = await readFile(localFile, 'utf8');
+    const instanceUrl = `${process.env.API_DOMAIN ?? ''}${
+      process.env.API_PORT ? `:${process.env.API_PORT}` : ''
+    }`;
+    const contents = raw.replaceAll('__PUBLIC_API_URL__', instanceUrl);
     baseConfigs = [parseNetworkConfigDocument(JSON.parse(contents))];
   } else {
     const servedNetworks = (options.servedDomains ?? []).map(
@@ -50,6 +54,12 @@ export async function loadNetworkConfigs(
     baseConfigs = await Promise.all(
       Object.values(resolvedRemoteUrls).map(loadNetworkConfigFromUrl)
     );
+  }
+
+  // Local mode is single-network; cross-network discovery requires a remote
+  // schema registry, so skip it to avoid fetches to non-existent endpoints.
+  if (options.source === 'local') {
+    return baseConfigs;
   }
 
   return loadOneHopCrossNetworkConfigs(baseConfigs);
