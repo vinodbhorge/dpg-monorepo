@@ -47,21 +47,39 @@ spec:
                 name: {{ include "dpg-api.fullname" . }}
             - secretRef:
                 name: {{ include "dpg-api.secretName" . }}
+          env:
+            {{- if .Values.postgres.adminSecret }}
+            - name: POSTGRES_ADMIN_USER
+              value: {{ .Values.postgres.adminUser | default "postgres" | quote }}
+            - name: POSTGRES_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.adminSecret }}
+                  key: {{ .Values.postgres.adminPasswordKey | default "postgres-password" }}
+            {{- end }}
           command:
             - sh
             - -ec
             - |
               : "${POSTGRES_HOST:?missing}" "${POSTGRES_PORT:=5432}" "${POSTGRES_USER:?missing}" "${POSTGRES_PASSWORD:?missing}" "${POSTGRES_DB:?missing}"
-              export PGPASSWORD="$POSTGRES_PASSWORD"
               echo "waiting for postgres at $POSTGRES_HOST:$POSTGRES_PORT"
               i=0
-              until pg_isready -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; do
+              until PGPASSWORD="$POSTGRES_PASSWORD" pg_isready -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; do
                 i=$((i+1))
                 if [ "$i" -gt 60 ]; then echo "postgres not reachable" >&2; exit 1; fi
                 sleep 2
               done
               echo "postgres ready"
-              EXISTS=$(psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='user'")
+              if [ -n "${POSTGRES_ADMIN_PASSWORD:-}" ]; then
+                echo "creating extensions as ${POSTGRES_ADMIN_USER}"
+                PGPASSWORD="$POSTGRES_ADMIN_PASSWORD" psql -v ON_ERROR_STOP=1 \
+                  -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_ADMIN_USER" -d "$POSTGRES_DB" \
+                  -c "CREATE EXTENSION IF NOT EXISTS pgcrypto; CREATE EXTENSION IF NOT EXISTS cube; CREATE EXTENSION IF NOT EXISTS earthdistance;"
+              else
+                echo "no admin creds; skipping CREATE EXTENSION (rely on initdb scripts)"
+              fi
+              export PGPASSWORD="$POSTGRES_PASSWORD"
+              EXISTS=$(psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='items'")
               if [ "$EXISTS" = "1" ]; then
                 echo "schema already present, skipping"
                 exit 0

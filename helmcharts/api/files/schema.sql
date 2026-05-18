@@ -121,4 +121,220 @@ ALTER TABLE "invitation" ADD CONSTRAINT "invitation_inviter_id_user_id_fk" FOREI
 ALTER TABLE "member" ADD CONSTRAINT "member_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "member" ADD CONSTRAINT "member_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "team" ADD CONSTRAINT "team_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "team_member" ADD CONSTRAINT "team_member_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;
+ALTER TABLE "team_member" ADD CONSTRAINT "team_member_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS cube;
+CREATE EXTENSION IF NOT EXISTS earthdistance;
+
+CREATE TABLE IF NOT EXISTS items (
+  item_network TEXT NOT NULL,
+  item_domain TEXT NOT NULL,
+  item_type TEXT NOT NULL,
+  item_id UUID DEFAULT gen_random_uuid() NOT NULL,
+
+  item_instance_url TEXT NOT NULL,
+  item_schema_url TEXT NOT NULL,
+
+  item_state JSONB NOT NULL DEFAULT '{}'::jsonb,
+
+  item_latitude DOUBLE PRECISION,
+  item_longitude DOUBLE PRECISION,
+  created_by TEXT NOT NULL,
+
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  CONSTRAINT items_pk PRIMARY KEY (item_network, item_domain, item_type, item_id),
+  CONSTRAINT items_created_by_fk FOREIGN KEY (created_by)
+    REFERENCES "user" (id) ON DELETE RESTRICT,
+  CONSTRAINT items_geo_lat_chk CHECK (
+    item_latitude IS NULL OR (item_latitude >= -90 AND item_latitude <= 90)
+  ),
+  CONSTRAINT items_geo_lng_chk CHECK (
+    item_longitude IS NULL OR (item_longitude >= -180 AND item_longitude <= 180)
+  ),
+  CONSTRAINT items_geo_pair_chk CHECK (
+    (item_latitude IS NULL AND item_longitude IS NULL)
+    OR
+    (item_latitude IS NOT NULL AND item_longitude IS NOT NULL)
+  )
+)
+PARTITION BY LIST (item_type);
+
+CREATE INDEX IF NOT EXISTS items_lookup_idx
+ON items (item_network, item_domain, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS items_instance_url_idx
+ON items (item_instance_url);
+
+CREATE INDEX IF NOT EXISTS items_schema_url_idx
+ON items (item_schema_url);
+
+CREATE INDEX IF NOT EXISTS items_created_by_idx
+ON items (created_by, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS items_state_gin_idx
+ON items USING GIN (item_state);
+
+CREATE INDEX IF NOT EXISTS items_geo_earth_idx
+ON items USING GIST (ll_to_earth(item_latitude, item_longitude));
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE TABLE IF NOT EXISTS item_actions (
+  action_name TEXT NOT NULL,
+  action_id UUID DEFAULT gen_random_uuid() NOT NULL,
+  action_status TEXT NOT NULL,
+  update_count INTEGER NOT NULL DEFAULT 0,
+
+  source_item_network TEXT NOT NULL,
+  source_item_domain TEXT NOT NULL,
+  source_item_type TEXT NOT NULL,
+  source_item_id UUID NOT NULL,
+  source_item_instance_url TEXT NOT NULL,
+  source_item_owner TEXT,
+
+  target_item_network TEXT NOT NULL,
+  target_item_domain TEXT NOT NULL,
+  target_item_type TEXT NOT NULL,
+  target_item_id UUID NOT NULL,
+  target_item_instance_url TEXT NOT NULL,
+  target_item_owner TEXT,
+
+  requirements_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb,
+  remarks TEXT,
+
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  CONSTRAINT item_actions_pk PRIMARY KEY (action_name, action_id),
+  CONSTRAINT item_actions_target_item_fk FOREIGN KEY (
+    target_item_network,
+    target_item_domain,
+    target_item_type,
+    target_item_id
+  ) REFERENCES items (
+    item_network,
+    item_domain,
+    item_type,
+    item_id
+  ) ON DELETE CASCADE
+)
+PARTITION BY LIST (action_name);
+
+CREATE INDEX IF NOT EXISTS item_actions_source_item_idx
+ON item_actions (
+  source_item_network,
+  source_item_domain,
+  source_item_type,
+  source_item_id,
+  created_at DESC
+);
+
+CREATE INDEX IF NOT EXISTS item_actions_target_item_idx
+ON item_actions (
+  target_item_network,
+  target_item_domain,
+  target_item_type,
+  target_item_id,
+  created_at DESC
+);
+
+CREATE INDEX IF NOT EXISTS item_actions_source_owner_idx
+ON item_actions (source_item_owner, updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS item_actions_target_owner_idx
+ON item_actions (target_item_owner, updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS item_actions_status_idx
+ON item_actions (action_status, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS item_actions_update_count_idx
+ON item_actions (action_name, action_id, update_count DESC);
+
+CREATE INDEX IF NOT EXISTS item_actions_requirements_gin_idx
+ON item_actions USING GIN (requirements_snapshot);
+
+CREATE TABLE IF NOT EXISTS action_events (
+  action_name TEXT NOT NULL,
+  event_id UUID DEFAULT gen_random_uuid() NOT NULL,
+  origin_instance_domain TEXT NOT NULL,
+  action_id UUID NOT NULL,
+  action_status TEXT NOT NULL,
+  update_count INTEGER NOT NULL,
+
+  source_item_network TEXT NOT NULL,
+  source_item_domain TEXT NOT NULL,
+  source_item_type TEXT NOT NULL,
+  source_item_id UUID NOT NULL,
+  source_item_instance_url TEXT NOT NULL,
+  source_item_owner TEXT,
+  source_item_latitude DOUBLE PRECISION,
+  source_item_longitude DOUBLE PRECISION,
+
+  target_item_network TEXT NOT NULL,
+  target_item_domain TEXT NOT NULL,
+  target_item_type TEXT NOT NULL,
+  target_item_id UUID NOT NULL,
+  target_item_instance_url TEXT NOT NULL,
+  target_item_owner TEXT,
+  target_item_latitude DOUBLE PRECISION,
+  target_item_longitude DOUBLE PRECISION,
+
+  event_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  remarks TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  CONSTRAINT action_events_pk PRIMARY KEY (action_name, event_id)
+)
+PARTITION BY LIST (action_name);
+
+CREATE UNIQUE INDEX IF NOT EXISTS action_events_origin_action_update_idx
+ON action_events (action_name, origin_instance_domain, action_id, update_count);
+
+CREATE INDEX IF NOT EXISTS action_events_action_idx
+ON action_events (action_name, action_id, update_count DESC, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS action_events_source_item_idx
+ON action_events (
+  source_item_network,
+  source_item_domain,
+  source_item_type,
+  source_item_id,
+  created_at DESC
+);
+
+CREATE INDEX IF NOT EXISTS action_events_target_item_idx
+ON action_events (
+  target_item_network,
+  target_item_domain,
+  target_item_type,
+  target_item_id,
+  created_at DESC
+);
+
+CREATE INDEX IF NOT EXISTS action_events_source_owner_idx
+ON action_events (source_item_owner, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS action_events_target_owner_idx
+ON action_events (target_item_owner, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS action_events_payload_gin_idx
+ON action_events USING GIN (event_payload);
+ALTER TABLE item_actions
+  ADD COLUMN IF NOT EXISTS source_item_owner TEXT,
+  ADD COLUMN IF NOT EXISTS target_item_owner TEXT;
+
+CREATE INDEX IF NOT EXISTS item_actions_source_owner_idx
+ON item_actions (source_item_owner, updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS item_actions_target_owner_idx
+ON item_actions (target_item_owner, updated_at DESC);
+
+ALTER TABLE action_events
+  ADD COLUMN IF NOT EXISTS source_item_owner TEXT,
+  ADD COLUMN IF NOT EXISTS target_item_owner TEXT;
+
+CREATE INDEX IF NOT EXISTS action_events_source_owner_idx
+ON action_events (source_item_owner, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS action_events_target_owner_idx
+ON action_events (target_item_owner, created_at DESC);

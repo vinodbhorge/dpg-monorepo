@@ -135,6 +135,10 @@ api:
     enabled: true
     host: dpg-postgresql
     port: 5432
+    # Admin creds (superuser) for the migrate Job — needed for CREATE EXTENSION.
+    adminSecret: *pg_existing_secret
+    adminUser: postgres
+    adminPasswordKey: *pg_admin_key
   redis:
     enabled: true
     host: dpg-redis-master
@@ -182,6 +186,16 @@ postgresql:
     service:
       ports:
         postgresql: 5432
+    # Bitnami runs these on an empty data dir (first boot only).
+    # Extensions live in the app database; superuser is required.
+    initdb:
+      scriptsConfigMap: ""
+      scripts:
+        00-extensions.sql: |
+          \connect dpg
+          CREATE EXTENSION IF NOT EXISTS pgcrypto;
+          CREATE EXTENSION IF NOT EXISTS cube;
+          CREATE EXTENSION IF NOT EXISTS earthdistance;
 
 redis:
   enabled: true
