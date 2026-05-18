@@ -86,13 +86,13 @@
     {
       "domain_name": "seeker",
       "instance_name": "Blue Dot Seeker Localhost",
-      "instance_url": "http://localhost:2743",
+      "instance_url": "__PUBLIC_API_URL__",
       "custom_item_schema_urls": {}
     },
     {
       "domain_name": "provider",
       "instance_name": "Blue Dot Provider Localhost",
-      "instance_url": "http://localhost:2743",
+      "instance_url": "__PUBLIC_API_URL__",
       "custom_item_schema_urls": {}
     }
   ],
@@ -104,6 +104,55 @@
     }
   ],
   "actions": {
+    "invite": {
+      "description": "Lets a provider invite a seeker to apply to one of their job postings.",
+      "interactions": [
+        {
+          "from_network": "blue_dot",
+          "from_domain": "provider",
+          "from_items": ["job_posting_1.0"],
+          "to_network": "blue_dot",
+          "to_domain": "seeker",
+          "to_items": ["profile_1.0"],
+          "requirement_schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "Job Invitation Requirement",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["role", "message"],
+            "properties": {
+              "role": {
+                "type": "string",
+                "minLength": 1
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              },
+              "salary_range": {
+                "type": "string"
+              }
+            }
+          },
+          "event_schema": {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "Job Invitation Event",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["status", "remark"],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["sent", "accepted", "declined"]
+              },
+              "remark": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ]
+    },
     "apply": {
       "description": "Lets a seeker apply to a provider's job posting. Also accepts yellow_dot students applying cross-network.",
       "interactions": [
