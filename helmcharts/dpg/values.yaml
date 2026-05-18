@@ -111,10 +111,14 @@ api:
     AUTH_MIDDLEWARE_ENABLED: "true"
     CREATE_TEST_OTP: "true"
     ALLOWED_ORIGINS: "http://localhost:8080"
-    SERVED_DOMAINS: "yellow_dot/student,yellow_dot/tutor,yellow_dot/coaching_center"
-    NETWORK_CONFIG_SOURCE: local
-    NETWORK_CONFIG_LOCAL_FILE: examples/schemas/yellow_dot/network.json
-    NETWORK_CONFIG_URLS: ""
+    SERVED_DOMAINS: "yellow_dot/student,yellow_dot/tutor,yellow_dot/coaching_center,blue_dot/seeker,blue_dot/provider"
+    # Network configs are served by the in-cluster dpg-schemas Service
+    # (see the schemas: block below). Add a network: drop the JSON in
+    # helmcharts/dpg/files/networks/, append the name to schemas.networks
+    # AND append <name>=http://dpg-schemas/<name>.json here.
+    NETWORK_CONFIG_SOURCE: remote
+    NETWORK_CONFIG_LOCAL_FILE: ""
+    NETWORK_CONFIG_URLS: "yellow_dot=http://dpg-schemas/yellow_dot.json,blue_dot=http://dpg-schemas/blue_dot.json"
     ALLOW_EXTRA_SCHEMA_DATA: "false"
     SCHEMA_REGISTRY_URL: ""
   # Hosts assume umbrella release name "dpg". Override --set api.postgres.host=... if different.
@@ -214,3 +218,20 @@ redis:
   replica:
     replicaCount: 0
     resources: *redis_replica_resources
+
+# Schemas service — nginx pod serving network.json files from a ConfigMap.
+# JSON files live in helmcharts/dpg/files/networks/<name>.json.
+# Helm substitutes __PUBLIC_API_URL__ and __SCHEMAS_URL__ at render time.
+# Add a network: drop <name>.json into files/networks/, append <name> here,
+# and append <name>=http://dpg-schemas/<name>.json to api.config.NETWORK_CONFIG_URLS.
+schemas:
+  enabled: true
+  image: nginx:1.27-alpine
+  imagePullPolicy: IfNotPresent
+  # Browser-facing API URL; used to substitute __PUBLIC_API_URL__ in network.json
+  # instance_url fields. For local port-forward keep http://localhost:8080.
+  publicApiUrl: "http://localhost:8080"
+  networks:
+    - yellow_dot
+    - blue_dot
+  resources: {}
