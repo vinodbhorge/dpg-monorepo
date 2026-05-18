@@ -60,41 +60,28 @@ resources:
     replica: &redis_replica_resources {}
 
 # -----------------------------------------------------------------------------
-# Credentials — single source for all secret material
-# Postgres/Redis use existingSecret (created out-of-band in the namespace).
-# API secrets render into a Helm-managed Secret unless existingSecret set.
+# Credentials — single source for all secret material.
+# Passwords below are populated by install.sh (generate_passwords). Helm
+# renders them into Secrets via templates/secrets.yaml; subcharts reference
+# those Secrets through existingSecret. Do NOT commit real values.
 # -----------------------------------------------------------------------------
 credentials:
   postgresql:
     existingSecret: &pg_existing_secret dpg-postgres
-    # Keys inside the existingSecret
     adminPasswordKey: &pg_admin_key postgres-password
     userPasswordKey: &pg_user_key password
     username: &pg_username dpg
     database: &pg_database dpg
+    password: &pg_password ""  # PG_PW
   redis:
     existingSecret: &redis_existing_secret dpg-redis
     passwordKey: &redis_password_key redis-password
+    password: &redis_password ""  # REDIS_PW
   api: &api_secrets
-    create: true
-    existingSecret: ""
-    data:
-      AUTH_SECRET: ""
-      POSTGRES_USER: dpg
-      POSTGRES_PASSWORD: ""
-      POSTGRES_DB: dpg
-      REDIS_PASSWORD: ""
-      NOTIFICATION_SERVICE_ENDPOINT: ""
-      NOTIFICATION_SERVICE_KEY_ID: ""
-      NOTIFICATION_SERVICE_SECRET: ""
-      SMS_TEMPLATE_ID: ""
-      MATCH_SCORE_PROVIDER: ""
-      DPG_SCORING_ENDPOINT: ""
-      DPG_SCORING_KEY_ID: ""
-      DPG_SCORING_SECRET: ""
-      DPG_SCORING_PATH: ""
-      DPG_SCORING_VERSION: ""
-      DPG_SCORING_PROMPT_VERSION: ""
+    create: false
+    existingSecret: &api_existing_secret dpg-api-secrets
+    authSecret: ""  # AUTH_SECRET
+    data: {}
 
 # =============================================================================
 # Subchart pass-throughs — do NOT edit values here.
@@ -122,9 +109,9 @@ api:
     API_DOMAIN: http://api.dpg.local
     API_PORT: "2742"
     AUTH_MIDDLEWARE_ENABLED: "true"
-    CREATE_TEST_OTP: "false"
-    ALLOWED_ORIGINS: ""
-    SERVED_DOMAINS: ""
+    CREATE_TEST_OTP: "true"
+    ALLOWED_ORIGINS: "http://localhost:8080"
+    SERVED_DOMAINS: "yellow_dot/student,yellow_dot/tutor,yellow_dot/coaching_center"
     NETWORK_CONFIG_SOURCE: local
     NETWORK_CONFIG_LOCAL_FILE: examples/schemas/yellow_dot/network.json
     NETWORK_CONFIG_URLS: ""
@@ -161,8 +148,10 @@ ui:
     enabled: false
   # UI nginx proxies /api/* to the in-cluster dpg-api service, so the browser
   # only needs to reach the UI pod (single port-forward, API never exposed).
+  # VITE_API_URL is intentionally empty so axios baseURL stays empty and
+  # the UI sends paths verbatim (/api/...); nginx then proxies to dpg-api.
   runtimeConfig:
-    VITE_API_URL: "/api"
+    VITE_API_URL: ""
     VITE_API_URLS: ""
     VITE_DEFAULT_API_URL: ""
     VITE_SHOW_INSTANCE_SELECTOR: "false"
@@ -174,6 +163,8 @@ postgresql:
   auth:
     username: *pg_username
     database: *pg_database
+    password: *pg_password
+    postgresPassword: *pg_password
     existingSecret: *pg_existing_secret
     secretKeys:
       adminPasswordKey: *pg_admin_key
@@ -203,6 +194,7 @@ redis:
   architecture: standalone
   auth:
     enabled: true
+    password: *redis_password
     existingSecret: *redis_existing_secret
     existingSecretPasswordKey: *redis_password_key
   commonConfiguration: |-
