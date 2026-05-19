@@ -10,11 +10,11 @@
 images:
   api: &api_image
     repository: ghcr.io/vinodbhorge/dpg-monorepo/api
-    tag: "v1.0.2"
+    tag: "v1.0.3"
     pullPolicy: IfNotPresent
   ui: &ui_image
     repository: ghcr.io/vinodbhorge/dpg-monorepo/ui
-    tag: "v1.0.2"
+    tag: "v1.0.3"
     pullPolicy: IfNotPresent
   postgresql: &postgresql_image
     registry: docker.io
