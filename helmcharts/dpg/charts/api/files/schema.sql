@@ -1,3 +1,16 @@
+-- DPG schema bootstrap. Applied once by the post-install migrate Job.
+-- Sources (kept canonical; do not edit by hand):
+--   apps/api/drizzle/0000_init.sql                          -> auth tables
+--   packages/database/src/utils/sql_scripts/create_items.sql -> items + indexes
+--   packages/database/src/utils/sql_scripts/create_actions_events.sql -> actions/events
+-- Extensions (pgcrypto, cube, earthdistance) are created upfront by the Job
+-- with admin creds, and again by postgres initdb on first boot, so the
+-- CREATE EXTENSION calls are intentionally omitted here.
+
+-- ============================================================================
+-- Auth tables (drizzle 0000_init.sql)
+-- ============================================================================
+
 CREATE TABLE "account" (
 	"id" text PRIMARY KEY NOT NULL,
 	"account_id" text NOT NULL,
@@ -121,9 +134,11 @@ ALTER TABLE "invitation" ADD CONSTRAINT "invitation_inviter_id_user_id_fk" FOREI
 ALTER TABLE "member" ADD CONSTRAINT "member_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "member" ADD CONSTRAINT "member_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "team" ADD CONSTRAINT "team_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "team_member" ADD CONSTRAINT "team_member_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;CREATE EXTENSION IF NOT EXISTS pgcrypto;
-CREATE EXTENSION IF NOT EXISTS cube;
-CREATE EXTENSION IF NOT EXISTS earthdistance;
+ALTER TABLE "team_member" ADD CONSTRAINT "team_member_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;
+
+-- ============================================================================
+-- items table + indexes (create_items.sql)
+-- ============================================================================
 
 CREATE TABLE IF NOT EXISTS items (
   item_network TEXT NOT NULL,
@@ -177,7 +192,10 @@ ON items USING GIN (item_state);
 
 CREATE INDEX IF NOT EXISTS items_geo_earth_idx
 ON items USING GIST (ll_to_earth(item_latitude, item_longitude));
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- ============================================================================
+-- item_actions + action_events (create_actions_events.sql)
+-- ============================================================================
 
 CREATE TABLE IF NOT EXISTS item_actions (
   action_name TEXT NOT NULL,
@@ -319,22 +337,3 @@ ON action_events (target_item_owner, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS action_events_payload_gin_idx
 ON action_events USING GIN (event_payload);
-ALTER TABLE item_actions
-  ADD COLUMN IF NOT EXISTS source_item_owner TEXT,
-  ADD COLUMN IF NOT EXISTS target_item_owner TEXT;
-
-CREATE INDEX IF NOT EXISTS item_actions_source_owner_idx
-ON item_actions (source_item_owner, updated_at DESC);
-
-CREATE INDEX IF NOT EXISTS item_actions_target_owner_idx
-ON item_actions (target_item_owner, updated_at DESC);
-
-ALTER TABLE action_events
-  ADD COLUMN IF NOT EXISTS source_item_owner TEXT,
-  ADD COLUMN IF NOT EXISTS target_item_owner TEXT;
-
-CREATE INDEX IF NOT EXISTS action_events_source_owner_idx
-ON action_events (source_item_owner, created_at DESC);
-
-CREATE INDEX IF NOT EXISTS action_events_target_owner_idx
-ON action_events (target_item_owner, created_at DESC);
