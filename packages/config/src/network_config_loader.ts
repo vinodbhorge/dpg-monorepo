@@ -27,13 +27,27 @@ export async function loadNetworkConfigs(
   let baseConfigs: NetworkConfig[];
 
   if (options.source === 'local') {
-    const localFile = resolve(process.cwd(), options.localFile);
-    const raw = await readFile(localFile, 'utf8');
+    const files = options.localFile
+      .split(',')
+      .map((f) => f.trim())
+      .filter(Boolean);
+    if (files.length === 0) {
+      throw new Error('NETWORK_CONFIG_LOCAL_FILE is empty for local source');
+    }
     const instanceUrl = `${process.env.API_DOMAIN ?? ''}${
       process.env.API_PORT ? `:${process.env.API_PORT}` : ''
     }`;
-    const contents = raw.replaceAll('__PUBLIC_API_URL__', instanceUrl);
-    baseConfigs = [parseNetworkConfigDocument(JSON.parse(contents))];
+    baseConfigs = await Promise.all(
+      files.map(async (file) => {
+        const localFile = resolve(process.cwd(), file);
+        const raw = await readFile(localFile, 'utf8');
+        const contents = raw.replaceAll(
+          '__PUBLIC_API_URL__',
+          instanceUrl
+        );
+        return parseNetworkConfigDocument(JSON.parse(contents));
+      })
+    );
   } else {
     const servedNetworks = (options.servedDomains ?? []).map(
       (binding) => binding.network

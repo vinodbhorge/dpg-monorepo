@@ -175,3 +175,17 @@ redis:
   enabled: true
   host: dpg-redis-master
   port: 6379
+
+# Network schemas — JSON files mounted into the api pod as a ConfigMap at
+# /app/schemas/<name>.json. The api reads them via NETWORK_CONFIG_SOURCE=local
+# and NETWORK_CONFIG_LOCAL_FILE (comma-separated paths).
+# To add a network: drop helmcharts/dpg/charts/api/files/networks/<name>.json
+# and append <name> to .schemas.networks here.
+schemas:
+  # In-cluster URL substituted into instance_url fields at render time.
+  # Used by the api for cross-instance fetches; must resolve inside the cluster.
+  apiInternalUrl: "http://dpg-api:2742"
+  # Reserved for cross_network_origins.schema_url substitution. Local mode
+  # skips cross-network fetches, so this stays empty.
+  crossNetworkUrl: ""
+  networks: []

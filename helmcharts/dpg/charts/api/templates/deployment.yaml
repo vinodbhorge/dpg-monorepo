@@ -63,6 +63,18 @@ spec:
           {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.schemas.networks }}
+          volumeMounts:
+            - name: schemas
+              mountPath: /app/schemas
+              readOnly: true
+          {{- end }}
+      {{- if .Values.schemas.networks }}
+      volumes:
+        - name: schemas
+          configMap:
+            name: {{ include "dpg-api.fullname" . }}-schemas
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

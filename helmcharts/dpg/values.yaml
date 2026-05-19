@@ -112,13 +112,14 @@ api:
     CREATE_TEST_OTP: "true"
     ALLOWED_ORIGINS: "http://localhost:8080"
     SERVED_DOMAINS: "yellow_dot/student,yellow_dot/tutor,yellow_dot/coaching_center,blue_dot/seeker,blue_dot/provider"
-    # Network configs are served by the in-cluster dpg-schemas Service
-    # (see the schemas: block below). Add a network: drop the JSON in
-    # helmcharts/dpg/files/networks/, append the name to schemas.networks
-    # AND append <name>=http://dpg-schemas/<name>.json here.
-    NETWORK_CONFIG_SOURCE: remote
-    NETWORK_CONFIG_LOCAL_FILE: ""
-    NETWORK_CONFIG_URLS: "yellow_dot=http://dpg-schemas/yellow_dot.json,blue_dot=http://dpg-schemas/blue_dot.json"
+    # Network schemas are mounted into the api pod from a ConfigMap (see
+    # api.schemas.networks below). Files live in
+    # helmcharts/dpg/charts/api/files/networks/<name>.json and are exposed
+    # at /app/schemas/<name>.json. To add a network: drop the JSON, append
+    # the name to api.schemas.networks AND the path here.
+    NETWORK_CONFIG_SOURCE: local
+    NETWORK_CONFIG_LOCAL_FILE: "/app/schemas/yellow_dot.json,/app/schemas/blue_dot.json"
+    NETWORK_CONFIG_URLS: ""
     ALLOW_EXTRA_SCHEMA_DATA: "false"
     SCHEMA_REGISTRY_URL: ""
   # Hosts assume umbrella release name "dpg". Override --set api.postgres.host=... if different.
@@ -134,6 +135,15 @@ api:
     enabled: true
     host: dpg-redis-master
     port: 6379
+
+  # Network schema ConfigMap mounted into this pod. apiInternalUrl is the
+  # in-cluster URL substituted into instance_url fields at render time.
+  schemas:
+    apiInternalUrl: "http://dpg-api:2742"
+    crossNetworkUrl: ""
+    networks:
+      - yellow_dot
+      - blue_dot
 
 ui:
   image: *ui_image
@@ -222,21 +232,3 @@ redis:
     replicaCount: 0
     resources: *redis_replica_resources
 
-# Schemas service — nginx pod serving network.json files from a ConfigMap.
-# JSON files live in helmcharts/dpg/files/networks/<name>.json.
-# Helm substitutes __PUBLIC_API_URL__ and __SCHEMAS_URL__ at render time.
-# Add a network: drop <name>.json into files/networks/, append <name> here,
-# and append <name>=http://dpg-schemas/<name>.json to api.config.NETWORK_CONFIG_URLS.
-schemas:
-  enabled: true
-  image: nginx:1.27-alpine
-  imagePullPolicy: IfNotPresent
-  # instance_url substituted into network.json files. The API uses these for
-  # cross-instance item fetches, so it must be reachable from inside the
-  # cluster — not from the browser. Default points at the in-cluster API
-  # Service.
-  publicApiUrl: "http://dpg-api:2742"
-  networks:
-    - yellow_dot
-    - blue_dot
-  resources: {}
